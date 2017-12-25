@@ -17,11 +17,14 @@
 package org.jvnet.hudson.plugins.thinbackup;
 
 import hudson.Extension;
+import hudson.model.Describable;
+import hudson.model.Descriptor;
 import hudson.model.ManagementLink;
 import hudson.model.TaskListener;
 import hudson.model.Hudson;
 import hudson.triggers.Trigger;
 
+import hudson.util.FormValidation;
 import java.io.File;
 import java.io.IOException;
 import java.text.ParseException;
@@ -29,6 +32,10 @@ import java.util.Date;
 import java.util.List;
 import java.util.logging.Logger;
 
+import javax.servlet.ServletException;
+import jenkins.model.Jenkins;
+import org.apache.commons.net.ftp.FTPClient;
+import org.apache.commons.net.ftp.FTPReply;
 import org.jvnet.hudson.plugins.thinbackup.restore.HudsonRestore;
 import org.jvnet.hudson.plugins.thinbackup.utils.Utils;
 import org.kohsuke.stapler.QueryParameter;
@@ -42,7 +49,7 @@ import org.kohsuke.stapler.StaplerResponse;
  * Seguy, et.al. Subsequently heavily modified.
  */
 @Extension
-public class ThinBackupMgmtLink extends ManagementLink {
+public class ThinBackupMgmtLink extends ManagementLink implements Describable<ThinBackupMgmtLink> {
   private static final Logger LOGGER = Logger.getLogger("hudson.plugins.thinbackup");
 
   @Override
@@ -114,6 +121,10 @@ public class ThinBackupMgmtLink extends ManagementLink {
   }
 
   public void doSaveSettings(final StaplerRequest res, final StaplerResponse rsp,
+      @QueryParameter("ftpServer") final String ftpServer,
+      @QueryParameter("ftpLogin") final String ftpLogin,
+      @QueryParameter("ftpPassword") final String ftpPassword,
+      @QueryParameter("ftpBackupPath") final String ftpBackupPath,
       @QueryParameter("backupPath") final String backupPath,
       @QueryParameter("fullBackupSchedule") final String fullBackupSchedule,
       @QueryParameter("diffBackupSchedule") final String diffBackupSchedule,
@@ -134,6 +145,10 @@ public class ThinBackupMgmtLink extends ManagementLink {
     Hudson.getInstance().checkPermission(Hudson.ADMINISTER);
 
     final ThinBackupPluginImpl plugin = ThinBackupPluginImpl.getInstance();
+    plugin.setFtpServer(ftpServer);
+    plugin.setFtpLogin(ftpLogin);
+    plugin.setFtpPassword(ftpPassword);
+    plugin.setFtpBackupPath(ftpBackupPath);
     plugin.setBackupPath(backupPath);
     plugin.setFullBackupSchedule(fullBackupSchedule);
     plugin.setDiffBackupSchedule(diffBackupSchedule);
@@ -165,4 +180,45 @@ public class ThinBackupMgmtLink extends ManagementLink {
     return Utils.getBackupsAsDates(new File(plugin.getExpandedBackupPath()));
   }
 
+  @SuppressWarnings("unchecked")
+  @Override
+  public Descriptor<ThinBackupMgmtLink> getDescriptor() {
+    return Jenkins.getInstance().getDescriptorOrDie(getClass());
+  }
+
+  @Extension
+  public static final class DescriptorImpl extends Descriptor<ThinBackupMgmtLink> {
+
+    public FormValidation doTestConnection(@QueryParameter("ftpServer") final String ftpServer,
+                                           @QueryParameter("ftpLogin") final String ftpLogin,
+                                           @QueryParameter("ftpPassword") final String ftpPassword) throws IOException, ServletException {
+      try {
+        int port = 21;
+        String server = ftpServer;
+        if (ftpServer.split(":| +", 2).length == 2) {
+          server = ftpServer.split(":| +", 2)[0];
+          port = Integer.parseInt(ftpServer.split(":| +", 2)[1]);
+        }
+        FTPClient ftpClient = new FTPClient();
+        ftpClient.connect(server, port);
+        int replyCode = ftpClient.getReplyCode();
+        if (!FTPReply.isPositiveCompletion(replyCode)) {
+          return FormValidation.error("Operation failed. Server reply code: " + replyCode);
+        }
+        boolean success = ftpClient.login(ftpLogin, ftpPassword);
+        ftpClient.enterLocalPassiveMode();
+        if (!success) {
+          return FormValidation.error("Could not login to the server");
+        }
+        return FormValidation.ok("Success");
+      } catch (Exception e) {
+        return FormValidation.error("Client error : "+e.getMessage());
+      }
+    }
+
+    @Override
+    public String getDisplayName() {
+      return "";
+    }
+  }
 }
