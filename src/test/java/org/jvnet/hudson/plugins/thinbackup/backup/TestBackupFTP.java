@@ -25,7 +25,7 @@ import org.mockftpserver.fake.filesystem.DirectoryEntry;
 import org.mockftpserver.fake.filesystem.FileSystem;
 import org.mockftpserver.fake.filesystem.UnixFakeFileSystem;
 
-public class TestBackupFTPUpload {
+public class TestBackupFTP {
 
     private File backupDir;
     private File jenkinsHome;
@@ -101,5 +101,28 @@ public class TestBackupFTPUpload {
         list = changelogHistory.list();
         Assert.assertEquals(2, list.length);
         Assert.assertEquals(2, fileSystem.listFiles(changelogHistory.getPath()).size());
+    }
+
+    @Test
+    public void testBackupNrMaxStoredFull() throws Exception {
+        final ThinBackupPluginImpl mockPlugin = TestHelper.createMockPlugin(jenkinsHome, backupDir);
+
+        when(mockPlugin.getFtpServer()).thenReturn("localhost:" + fakeFtpServer.getServerControlPort());
+        when(mockPlugin.getFtpLogin()).thenReturn(USER);
+        when(mockPlugin.getFtpPassword()).thenReturn(PASSWORD);
+        when(mockPlugin.getFtpBackupPath()).thenReturn(backupDir.getPath());
+        when(mockPlugin.getNrMaxStoredFull()).thenReturn(1);
+
+        new HudsonBackup(mockPlugin, ThinBackupPeriodicWork.BackupType.FULL, new Date(), mockHudson).backup();
+        String[] list = backupDir.list();
+        Assert.assertEquals(1, list.length);
+        String backupName = list[0];
+        new HudsonBackup(mockPlugin, ThinBackupPeriodicWork.BackupType.FULL, new Date(0), mockHudson).backup();
+
+        list = backupDir.list();
+        Assert.assertEquals(1, list.length);
+        Assert.assertEquals(1, fileSystem.listFiles(backupDir.getPath()).size());
+
+        Assert.assertEquals(backupName, ((DirectoryEntry) fileSystem.listFiles(backupDir.getPath()).get(0)).getName());
     }
 }

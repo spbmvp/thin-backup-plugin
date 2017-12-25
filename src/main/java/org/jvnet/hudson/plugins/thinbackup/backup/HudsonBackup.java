@@ -53,6 +53,7 @@ import org.apache.commons.net.ftp.FTPClient;
 import org.apache.commons.net.ftp.FTPReply;
 import org.jvnet.hudson.plugins.thinbackup.ThinBackupPeriodicWork.BackupType;
 import org.jvnet.hudson.plugins.thinbackup.ThinBackupPluginImpl;
+import org.jvnet.hudson.plugins.thinbackup.utils.FTPUtils;
 import org.jvnet.hudson.plugins.thinbackup.utils.Utils;
 
 public class HudsonBackup {
@@ -146,144 +147,6 @@ public class HudsonBackup {
     backupDirectory = Utils.getFormattedDirectory(backupRoot, this.backupType, date);
   }
 
-  private void ftpUploadBackup() {
-    LOGGER.info("FTP upload backup start");
-    int port = 21;
-    String server = ftpServer;
-    if (ftpServer.split(":| +", 2).length == 2) {
-      server = ftpServer.split(":| +", 2)[0];
-      port = Integer.parseInt(ftpServer.split(":| +", 2)[1]);
-    }
-    FTPClient ftpClient = new FTPClient();
-    try {
-      LOGGER.fine("FTP start connect");
-      ftpClient.connect(server, port);
-      int replyCode = ftpClient.getReplyCode();
-      if (!FTPReply.isPositiveCompletion(replyCode)) {
-        LOGGER.severe("Operation failed. Server reply code: " + replyCode);
-        return;
-      }
-      LOGGER.fine("FTP login");
-      boolean success = ftpClient.login(ftpLogin, ftpPassword);
-      ftpClient.enterLocalPassiveMode();
-      if (!success) {
-        LOGGER.severe("Could not login to the server");
-        return;
-      }
-      // Creates a directory
-      String dirToCreate = ftpBackupPath + "/" + backupDirectory.getName();
-      success = ftpClient.changeWorkingDirectory(dirToCreate);
-      if (!success) {
-        LOGGER.info("FTP make dir " + dirToCreate);
-        success = ftpClient.makeDirectory(dirToCreate);
-        if (success) {
-          LOGGER.fine("Successfully created directory on FTP server: " + dirToCreate);
-        } else {
-          LOGGER.severe("Failed to create directory. See server's reply.");
-        }
-      } else {
-        LOGGER.fine("Directory on FTP server: '" + dirToCreate + "' exist");
-      }
-      // copy backup
-      uploadDirectory(ftpClient, dirToCreate, backupDirectory.getPath(), "");
-      // logs out
-      LOGGER.info("FTP logout. Backup upload DONE");
-      ftpClient.logout();
-      ftpClient.disconnect();
-    } catch (IOException ex) {
-      LOGGER.severe("Oops! Something wrong happened");
-      ex.printStackTrace();
-    }
-  }
-
-  /**
-   * Upload a whole directory (including its nested sub directories and files)
-   * to a FTP server.
-   *
-   * @param ftpClient       an instance of org.apache.commons.net.ftp.FTPClient class.
-   * @param remoteDirPath   Path of the destination directory on the server.
-   * @param localParentDir  Path of the local directory being uploaded.
-   * @param remoteParentDir Path of the parent directory of the current directory on the
-   *                        server (used by recursive calls).
-   * @throws IOException if any network or IO error occurred.
-   */
-  private void uploadDirectory(FTPClient ftpClient,
-                               String remoteDirPath, String localParentDir, String remoteParentDir)
-          throws IOException {
-
-    LOGGER.fine("LISTING directory: " + localParentDir);
-
-    File localDir = new File(localParentDir);
-    File[] subFiles = localDir.listFiles();
-    if (subFiles != null && subFiles.length > 0) {
-      for (File item : subFiles) {
-        String remoteFilePath = remoteDirPath + "/" + remoteParentDir
-                + "/" + item.getName();
-        if (remoteParentDir.equals("")) {
-          remoteFilePath = remoteDirPath + "/" + item.getName();
-        }
-
-
-        if (item.isFile()) {
-          // upload the file
-          String localFilePath = item.getAbsolutePath();
-          LOGGER.fine("About to upload the file: " + localFilePath);
-          boolean uploaded = uploadSingleFile(ftpClient,
-                  localFilePath, remoteFilePath);
-          if (uploaded) {
-            LOGGER.fine("UPLOADED a file to: "
-                    + remoteFilePath);
-          } else {
-            LOGGER.severe("COULD NOT upload the file: "
-                    + localFilePath);
-          }
-        } else {
-          // create directory on the server
-          boolean created = ftpClient.makeDirectory(remoteFilePath);
-          if (created) {
-            LOGGER.fine("CREATED the directory: "
-                    + remoteFilePath);
-          } else {
-            LOGGER.severe("COULD NOT create the directory: "
-                    + remoteFilePath);
-          }
-
-          // upload the sub directory
-          String parent = remoteParentDir + "/" + item.getName();
-          if (remoteParentDir.equals("")) {
-            parent = item.getName();
-          }
-
-          localParentDir = item.getAbsolutePath();
-          uploadDirectory(ftpClient, remoteDirPath, localParentDir,
-                  parent);
-        }
-      }
-    }
-  }
-
-  /**
-   * Upload a single file to the FTP server.
-   *
-   * @param ftpClient      an instance of org.apache.commons.net.ftp.FTPClient class.
-   * @param localFilePath  Path of the file on local computer
-   * @param remoteFilePath Path of the file on remote the server
-   * @return true if the file was uploaded successfully, false otherwise
-   * @throws IOException if any network or IO error occurred.
-   */
-  public boolean uploadSingleFile(FTPClient ftpClient,
-                                  String localFilePath, String remoteFilePath) throws IOException {
-    File localFile = new File(localFilePath);
-
-    InputStream inputStream = new FileInputStream(localFile);
-    try {
-      ftpClient.setFileType(FTP.BINARY_FILE_TYPE);
-      return ftpClient.storeFile(remoteFilePath, inputStream);
-    } finally {
-      inputStream.close();
-    }
-  }
-
   public void backup() throws IOException {
     if (backupType == BackupType.NONE) {
       final String msg = "Backup type must be FULL or DIFF. Backup cannot be performed.";
@@ -324,15 +187,18 @@ public class HudsonBackup {
 
     (new DirectoryCleaner()).removeEmptyDirectories(backupDirectory);
 
+    if (ftpLogin != null && ftpPassword != null && ftpServer != null) {
+      if (!(ftpLogin.isEmpty() || ftpPassword.isEmpty() || ftpServer.isEmpty())) {
+        FTPUtils ftpUtils = new FTPUtils(ftpServer, ftpLogin, ftpPassword);
+        ftpUtils.ftpUploadBackup(ftpBackupPath, backupDirectory);
+        ftpUtils.removeSuperfluousBackupSets(plugin.getNrMaxStoredFull(),new File(plugin.getExpandedBackupPath()), ftpBackupPath);
+      }
+    }
+
     if (backupType == BackupType.FULL) {
       cleanupDiffs();
       moveOldBackupsToZipFile(backupDirectory);
       removeSuperfluousBackupSets();
-    }
-    if (ftpLogin != null && ftpPassword != null && ftpServer != null) {
-      if (!(ftpLogin.isEmpty() || ftpPassword.isEmpty() || ftpServer.isEmpty())) {
-        ftpUploadBackup();
-      }
     }
   }
 
