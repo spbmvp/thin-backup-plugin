@@ -26,8 +26,33 @@
                 thinBackup Configuration
             </h1>
 
-            <f:form method="post" action="saveSettings">
+            <f:form method="post" action="saveSettings" descriptor="${it.descriptor}">
                  <f:section title="Backup settings">
+
+                    <f:entry title="FTP Server" field="ftpServer"
+                        help="/plugin/thinBackup/help/help-ftpServer.html">
+                        <f:textbox value="${it.configuration.ftpServer}" name="ftpServer"/>
+                    </f:entry>
+
+                    <f:entry title="FTP Login" field="ftpLogin"
+                        help="/plugin/thinBackup/help/help-ftpLogin.html">
+                        <f:textbox value="${it.configuration.ftpLogin}" name="ftpLogin"/>
+                    </f:entry>
+
+                    <f:entry title="FTP Password" field="ftpPassword"
+                        help="/plugin/thinBackup/help/help-ftpPassword.html">
+                        <f:password value="${it.configuration.ftpPassword}" name="ftpPassword"/>
+                    </f:entry>
+
+                    <f:entry title="FTP backupPath" field="ftpBackupPath"
+                        help="/plugin/thinBackup/help/help-ftpBackupPath.html">
+                        <f:textbox value="${it.configuration.ftpBackupPath}" name="ftpBackupPath"/>
+                    </f:entry>
+
+                    <f:validateButton
+                       title="${%Test Connection}" progress="${%Testing...}"
+                       method="testConnection" with="ftpServer,ftpLogin,ftpPassword"/>
+
                     <f:entry title="Backup directory" field="backupPath"
                         help="/plugin/thinBackup/help/help-backupPath.html">
                         <f:textbox value="${it.configuration.backupPath}" name="backupPath"

@@ -45,6 +45,10 @@ public class ThinBackupPluginImpl extends Plugin {
   private String fullBackupSchedule = "";
   private String diffBackupSchedule = "";
   private String backupPath = "";
+  private String ftpServer = "";
+  private String ftpLogin = "";
+  private String ftpPassword = "";
+  private String ftpBackupPath = "";
   private int nrMaxStoredFull = -1;
   private String excludedFilesRegex = null;
   private boolean waitForIdle = true;
@@ -107,6 +111,54 @@ public class ThinBackupPluginImpl extends Plugin {
 
   public void setBackupPath(final String backupPath) {
     this.backupPath = backupPath;
+  }
+
+  public void setFtpServer(final String ftpServer) {
+    this.ftpServer = ftpServer;
+  }
+
+  public void setFtpLogin(final String ftpLogin) {
+    this.ftpLogin = ftpLogin;
+  }
+
+  public void setFtpPassword(final String ftpPassword) {
+    this.ftpPassword = ftpPassword;
+  }
+
+  public void setFtpBackupPath(final String ftpBackupPath) {
+    this.ftpBackupPath = ftpBackupPath;
+  }
+
+  public String getFtpServer() {
+    if(ftpBackupPath == null){
+      return "";
+    } else {
+      return ftpServer;
+    }
+  }
+
+  public String getFtpLogin() {
+    if(ftpBackupPath == null){
+      return "";
+    } else {
+      return ftpLogin;
+    }
+  }
+
+  public String getFtpPassword() {
+    if(ftpBackupPath == null){
+      return "";
+    } else {
+      return ftpPassword;
+    }
+  }
+
+  public String getFtpBackupPath() {
+    if(ftpBackupPath == null){
+      return "";
+    } else {
+      return ftpBackupPath;
+    }
   }
 
   /**

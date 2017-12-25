@@ -25,8 +25,10 @@ import hudson.model.Run;
 import hudson.util.RunList;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.InputStream;
 import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -46,8 +48,12 @@ import org.apache.commons.io.filefilter.FileFilterUtils;
 import org.apache.commons.io.filefilter.IOFileFilter;
 import org.apache.commons.io.filefilter.RegexFileFilter;
 import org.apache.commons.io.filefilter.TrueFileFilter;
+import org.apache.commons.net.ftp.FTP;
+import org.apache.commons.net.ftp.FTPClient;
+import org.apache.commons.net.ftp.FTPReply;
 import org.jvnet.hudson.plugins.thinbackup.ThinBackupPeriodicWork.BackupType;
 import org.jvnet.hudson.plugins.thinbackup.ThinBackupPluginImpl;
+import org.jvnet.hudson.plugins.thinbackup.utils.FTPUtils;
 import org.jvnet.hudson.plugins.thinbackup.utils.Utils;
 
 public class HudsonBackup {
@@ -79,6 +85,10 @@ public class HudsonBackup {
   private final File hudsonHome;
   private final File backupRoot;
   private final File backupDirectory;
+  private String ftpServer;
+  private String ftpLogin;
+  private String ftpPassword;
+  private String ftpBackupPath;
   private final BackupType backupType;
   private final Date latestFullBackupDate;
   private Pattern excludedFilesRegexPattern = null;
@@ -94,6 +104,11 @@ public class HudsonBackup {
     this.hudson = hudson;
     this.plugin = plugin;
     this.hudsonHome = plugin.getHudsonHome();
+
+    this.ftpServer = plugin.getFtpServer();
+    this.ftpLogin = plugin.getFtpLogin();
+    this.ftpPassword = plugin.getFtpPassword();
+    this.ftpBackupPath = plugin.getFtpBackupPath();
 
     final String excludedFilesRegex = plugin.getExcludedFilesRegex();
     if ((excludedFilesRegex != null) && !excludedFilesRegex.trim().isEmpty()) {
@@ -171,6 +186,14 @@ public class HudsonBackup {
         backupAdditionalFiles();
 
     (new DirectoryCleaner()).removeEmptyDirectories(backupDirectory);
+
+    if (ftpLogin != null && ftpPassword != null && ftpServer != null) {
+      if (!(ftpLogin.isEmpty() || ftpPassword.isEmpty() || ftpServer.isEmpty())) {
+        FTPUtils ftpUtils = new FTPUtils(ftpServer, ftpLogin, ftpPassword);
+        ftpUtils.ftpUploadBackup(ftpBackupPath, backupDirectory);
+        ftpUtils.removeSuperfluousBackupSets(plugin.getNrMaxStoredFull(),new File(plugin.getExpandedBackupPath()), ftpBackupPath);
+      }
+    }
 
     if (backupType == BackupType.FULL) {
       cleanupDiffs();
